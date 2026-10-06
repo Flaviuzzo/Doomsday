@@ -270,14 +270,18 @@ const mcuRaw = [
   { id: "quantumania", title: "Ant-Man and the Wasp: Quantumania", type: "movie", checked: false },
   { id: "gotg3", title: "Guardians of the Galaxy Vol. 3", type: "movie", checked: false },
   { id: "secretinvasion", title: "Secret Invasion", type: "series", episodes: 6, checked: false },
-  { id: "marvels", title: "The Marvels", type: "movie", checked: false },
-  { id: "loki-2", title: "Loki — Stagione 2", type: "series", episodes: 6, checked: false },
+  { id: "xmen1", title: "X-Men (2000)", type: "movie", checked: false, note: "Lista ufficiale Disney+" },
+  { id: "xmen2", title: "X2: X-Men United (2003)", type: "movie", checked: false, note: "Lista ufficiale Disney+" },
+  { id: "xmen3", title: "X-Men: Conflitto finale (2006)", type: "movie", checked: false, note: "Beast (Kelsey Grammer) torna in Doomsday" },
+  { id: "xmen-dofp", title: "X-Men: Giorni di un futuro passato (2014)", type: "movie", checked: false, note: "Riscrive la timeline" },
+  { id: "marvels", title: "The Marvels", type: "movie", checked: false, note: "⭐ Scena mid-credits fondamentale (X-Men)" },
+  { id: "loki-2", title: "Loki — Stagione 2", type: "series", episodes: 6, checked: false, note: "Lista ufficiale Disney+" },
   { id: "whatif-2", title: "What If...? — Stagione 2", type: "series", episodes: 9, checked: false },
   { id: "deadpoolwolverine", title: "Deadpool & Wolverine", type: "movie", checked: false, note: "Ponte con universo X-Men Fox" },
   { id: "agatha", title: "Agatha All Along", type: "series", episodes: 9, checked: false },
   { id: "whatif-3", title: "What If...? — Stagione 3", type: "series", episodes: 8, checked: false },
   { id: "dbaS1", title: "Daredevil: Born Again — Stagione 1", type: "movie", checked: true, note: "riassunto" },
-  { id: "bnw", title: "Captain America: Brave New World", type: "movie", checked: false },
+  { id: "bnw", title: "Captain America: Brave New World", type: "movie", checked: false, note: "⭐ Scena mid-credits (The Leader)" },
   { id: "thunderbolts", title: "Thunderbolts*", type: "movie", checked: true },
   { id: "ffsteps", title: "The Fantastic Four: First Steps", type: "movie", checked: true },
   { id: "wonderman", title: "Wonder Man", type: "series", episodes: 8, checked: false, note: "N. episodi indicativo" },
@@ -324,7 +328,7 @@ const SUPABASE_KEY = "sb_publishable_N3u7vZCq4Y3ck6br05z8rw_vU2pbPl0";
 const CODE_KEY = "doomsdayAccessCode";
 const CACHE_KEY = "doomsdayCache";
 let cache = readLocal();
-let pushing = false, pending = false, unsynced = false;
+let pushing = false, pending = false, unsynced = false, syncReady = false;
 
 function readLocal() {
   try { const r = localStorage.getItem(CACHE_KEY); if (r) return JSON.parse(r); } catch(e) {}
@@ -376,22 +380,23 @@ async function push() {
   } catch(e) { unsynced = true; setStatus("Offline: salvato sul dispositivo"); }
   pushing = false;
 }
+function markReady() { if (!syncReady) { syncReady = true; render(); } }
 async function pull() {
   if (pushing || pending) return;
-  if (unsynced) { push(); return; }
-  const code = getCode(); if (!code) return;
+  if (unsynced) { syncReady = true; push(); return; }
+  const code = getCode(); if (!code) { markReady(); return; }
   try {
     const d = await rpc("get_plan", { p_secret: code });
-    if (d === null) { badCode(); return; }
+    if (d === null) { badCode(); markReady(); return; }
+    const wasReady = syncReady; syncReady = true;
     const remoteEmpty = !Object.keys(d.checks || {}).length && !(d.rest_days || []).length;
     const localHasData = Object.keys(cache.checks).length || cache.rest.length;
-    if (remoteEmpty && localHasData) { push(); return; }
-    if (JSON.stringify(d.checks) !== JSON.stringify(cache.checks) || JSON.stringify(d.rest_days) !== JSON.stringify(cache.rest)) {
-      cache = { checks: d.checks || {}, rest: d.rest_days || [] };
-      writeLocal(); render();
-    }
+    if (remoteEmpty && localHasData) { push(); render(); return; }
+    const changed = JSON.stringify(d.checks) !== JSON.stringify(cache.checks) || JSON.stringify(d.rest_days) !== JSON.stringify(cache.rest);
+    if (changed) { cache = { checks: d.checks || {}, rest: d.rest_days || [] }; writeLocal(); }
+    if (changed || !wasReady) render();
     setStatus("✓ Sincronizzato");
-  } catch(e) { setStatus("Offline: uso i dati del dispositivo"); }
+  } catch(e) { setStatus("Offline: uso i dati del dispositivo"); markReady(); }
 }
 function resetPlan() {
   if (!confirm("Azzerare tutte le spunte e le pause di questo piano?")) return;
@@ -514,7 +519,21 @@ function render() {
 
   const remaining = mcuTrack.filter(item => !isChecked(state, item));
   const availableDays = buildAvailableDays(today, restDays);
-  const schedule = buildSchedule(remaining, availableDays);
+  let schedule = buildSchedule(remaining, availableDays);
+
+  // Quota di oggi "congelata": spuntare un titolo completa la giornata, non ne porta altri
+  if (syncReady && availableDays.length && sameDay(availableDays[0], today)) {
+    const todayKey = dateKey(today);
+    let daily = state.__daily;
+    if (!daily || daily.date !== todayKey) {
+      daily = { date: todayKey, ids: schedule[0].items.map(i => i.id) };
+      state.__daily = daily;
+      saveState(state);
+    }
+    const frozen = daily.ids.map(id => mcuTrack.find(i => i.id === id)).filter(Boolean);
+    const rest = remaining.filter(i => !daily.ids.includes(i.id));
+    schedule = [{ date: availableDays[0], items: frozen }].concat(buildSchedule(rest, availableDays.slice(1)));
+  }
 
   const N = remaining.length;
   const D = availableDays.length;
@@ -542,10 +561,11 @@ function render() {
     } else {
       todayGroup.items.forEach(item => {
         const row = document.createElement("div");
-        row.className = "item";
+        const doneNow = isChecked(state, item);
+        row.className = "item" + (doneNow ? " checked" : "");
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.checked = false;
+        cb.checked = doneNow;
         cb.addEventListener("change", () => {
           const st = loadState();
           st[item.id] = cb.checked;
@@ -564,6 +584,12 @@ function render() {
         row.appendChild(label);
         todayBox.appendChild(row);
       });
+      if (todayGroup.items.every(i => isChecked(state, i))) {
+        const ok = document.createElement("div");
+        ok.className = "rest-notice";
+        ok.textContent = "✅ Giornata completata! Il resto è per domani.";
+        todayBox.appendChild(ok);
+      }
     }
   }
 

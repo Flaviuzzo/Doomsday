@@ -295,7 +295,7 @@ const mcuRaw = [
   { id: "hawkeye", title: "Hawkeye", type: "series", episodes: 6, checked: true, note: "Importante" },
   { id: "moonknight", title: "Moon Knight", type: "series", episodes: 6, checked: true },
   { id: "wakandaforever", title: "Black Panther: Wakanda Forever", type: "movie", checked: true },
-  { id: "echo", title: "Echo", type: "series", episodes: 5, checkedUpTo: 4 },
+  { id: "echo", title: "Echo", type: "series", episodes: 5, checkedUpTo: 3 },
   { id: "shehulk", title: "She-Hulk: Attorney at Law", type: "movie", checked: true },
   { id: "msmarvel", title: "Ms. Marvel", type: "series", episodes: 6, checked: false, note: "Importante" },
   { id: "lovethunder", title: "Thor: Love and Thunder", type: "movie", checked: false },
@@ -386,6 +386,9 @@ const LONG_MIN = 100; // un film da 100 min in su sta da solo in una giornata
 const PRESET_REST = ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"];
 // Scadenza: 15 dicembre 2026, ore 20:00 (dalle 20:01 non si guarda più nulla)
 const DEADLINE_TIME = new Date(2026, 11, 15, 20, 0, 0);
+
+// Quote giornaliere forzate (data → id dei titoli). Oggi 6 ottobre: solo l'ep. 4 di Echo.
+const DAILY_OVERRIDE = { "2026-10-06": ["echo-e4"] };
 
 function sumMin(items) { return items.reduce((s, i) => s + (i.min || 0), 0); }
 function fmtMin(m) {
@@ -625,8 +628,9 @@ function render() {
   if (syncReady && availableDays.length && sameDay(availableDays[0], today)) {
     const todayKey = dateKey(today);
     let daily = state.__daily;
-    if (!daily || daily.date !== todayKey) {
-      daily = { date: todayKey, ids: schedule[0].items.map(i => i.id) };
+    const forced = DAILY_OVERRIDE[todayKey];
+    if (!daily || daily.date !== todayKey || (forced && JSON.stringify(daily.ids) !== JSON.stringify(forced))) {
+      daily = { date: todayKey, ids: forced || schedule[0].items.map(i => i.id) };
       state.__daily = daily;
       saveState(state);
     }

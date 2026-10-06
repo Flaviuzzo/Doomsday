@@ -84,6 +84,31 @@
   .day-cell.disabled { background: transparent; color: #3a3844; cursor: default; }
   .day-cell.today { outline: 2px solid var(--violet); font-weight: 700; }
   .day-cell.resting { background: var(--gold); color: #1a1430; font-weight: 700; }
+  .day-cell.fixed { cursor: default; box-shadow: inset 0 0 0 2px #7a6320; }
+  .today-meta { margin-top: 8px; font-size: 0.72rem; color: var(--muted); }
+
+  .alarm {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(15,14,23,0.97); padding: 24px;
+  }
+  .alarm.show { display: flex; }
+  .alarm-box {
+    text-align: center; border: 2px solid var(--gold); border-radius: 16px;
+    padding: 28px 22px; background: #1a1710; max-width: 340px;
+    animation: alarmPulse 1s ease-in-out infinite;
+  }
+  .alarm-icon { font-size: 3rem; }
+  .alarm-box h2 { margin: 8px 0; color: var(--gold); font-size: 1.5rem; letter-spacing: 1px; }
+  .alarm-box p { color: var(--text); font-size: 0.92rem; line-height: 1.45; }
+  .alarm-box button {
+    margin-top: 14px; background: var(--gold); color: #1a1430; border: 0;
+    border-radius: 8px; padding: 10px 22px; font-weight: 700; font-size: 0.9rem;
+  }
+  @keyframes alarmPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(212,175,55,0.5); }
+    50% { box-shadow: 0 0 0 16px rgba(212,175,55,0); }
+  }
 
   .upcoming-title {
     font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px;
@@ -159,12 +184,22 @@
     <div class="pill">Titoli da vedere: <b id="itemsLeft">–</b></div>
     <div class="pill">Ritmo: <b id="pace">–</b></div>
     <div class="pill">Pause impostate: <b id="restCount">–</b></div>
+    <div class="pill">Scadenza tra: <b id="deadlineLeft">–</b></div>
   </div>
   <div class="progress-wrap">
     <div class="progress-bar" id="progressBar"></div>
     <div class="progress-label" id="progressLabel">0 / 0</div>
   </div>
 </header>
+
+<div class="alarm" id="alarm">
+  <div class="alarm-box">
+    <div class="alarm-icon">⏰</div>
+    <h2>TEMPO SCADUTO</h2>
+    <p>Sono le 20:00 del 15 dicembre.<br>Da qui in poi non si guarda più niente: si va al cinema! 🎬</p>
+    <button onclick="dismissAlarm()">Ok</button>
+  </div>
+</div>
 
 <main>
   <div class="today-box">
@@ -174,7 +209,7 @@
 
   <details class="calendar-section" open>
     <summary>🗓️ Giorni di pausa — tocca una data per saltarla</summary>
-    <div class="calendar-hint">Puoi segnare pausa solo da oggi al 15 dicembre. Le date già passate o dopo la scadenza sono bloccate. Il calendario sottostante si ricalcola da solo.</div>
+    <div class="calendar-hint">Puoi segnare pausa solo da oggi al 15 dicembre. Le date già passate o dopo la scadenza sono bloccate. Il calendario sottostante si ricalcola da solo. Le date con il bordo scuro (29/10–2/11) sono pause fisse.</div>
     <div id="calendarGrids"></div>
   </details>
 
@@ -260,7 +295,7 @@ const mcuRaw = [
   { id: "hawkeye", title: "Hawkeye", type: "series", episodes: 6, checked: true, note: "Importante" },
   { id: "moonknight", title: "Moon Knight", type: "series", episodes: 6, checked: true },
   { id: "wakandaforever", title: "Black Panther: Wakanda Forever", type: "movie", checked: true },
-  { id: "echo", title: "Echo", type: "series", episodes: 5, checkedUpTo: 2 },
+  { id: "echo", title: "Echo", type: "series", episodes: 5, checkedUpTo: 4 },
   { id: "shehulk", title: "She-Hulk: Attorney at Law", type: "movie", checked: true },
   { id: "msmarvel", title: "Ms. Marvel", type: "series", episodes: 6, checked: false, note: "Importante" },
   { id: "lovethunder", title: "Thor: Love and Thunder", type: "movie", checked: false },
@@ -291,6 +326,16 @@ const mcuRaw = [
   { id: "visionquest", title: "Vision Quest", type: "series", episodes: 6, checked: false, note: "N. episodi indicativo" },
 ];
 
+// Durate approssimative in minuti: film = durata, serie = durata di un episodio.
+// Se un titolo non è qui: film 110 min, episodio 45 min.
+const DUR = {
+  echo: 45, msmarvel: 45, lovethunder: 119, ironheart: 45, werewolf: 53,
+  gotgholiday: 44, quantumania: 125, gotg3: 150, secretinvasion: 45,
+  xmen1: 104, xmen2: 134, xmen3: 104, "xmen-dofp": 132, marvels: 105,
+  "loki-2": 47, "whatif-2": 33, deadpoolwolverine: 128, agatha: 40,
+  "whatif-3": 30, bnw: 118, wonderman: 40, visionquest: 40,
+};
+
 function expand(raw) {
   const out = [];
   raw.forEach(entry => {
@@ -304,6 +349,7 @@ function expand(raw) {
           groupTitle: entry.title,
           groupNote: entry.note,
           isSeries: true,
+          min: DUR[entry.id] || 45,
           defaultChecked: checkedForEp,
         });
       }
@@ -311,6 +357,7 @@ function expand(raw) {
       out.push({
         id: entry.id, title: entry.title, note: entry.note,
         isSeries: false, groupTitle: entry.title,
+        min: DUR[entry.id] || 110,
         defaultChecked: entry.checked,
       });
     }
@@ -319,6 +366,34 @@ function expand(raw) {
 }
 
 const mcuTrack = expand(mcuRaw);
+
+// ====== REGOLE DI PIANIFICAZIONE ======
+// Per ogni giorno della settimana (0 = domenica ... 6 = sabato):
+//   w   = peso relativo del giorno (quanto carico può prendersi rispetto a un giorno libero)
+//   cap = minuti massimi di visione
+// Mer e Ven: occupato 17:00–23:30 → giorno leggero. Sab: occupato da 17:00 fino a dom 15:00 → sabato leggero.
+const DAY_RULES = {
+  0: { w: 1,   cap: 240 }, // dom (libero dalle 15)
+  1: { w: 1,   cap: 240 }, // lun
+  2: { w: 1,   cap: 240 }, // mar
+  3: { w: 0.4, cap: 150 }, // mer (occupato 17–23:30)
+  4: { w: 1,   cap: 240 }, // gio
+  5: { w: 0.4, cap: 150 }, // ven (occupato 17–23:30)
+  6: { w: 0.4, cap: 150 }, // sab (occupato dalle 17)
+};
+const LONG_MIN = 100; // un film da 100 min in su sta da solo in una giornata
+// Pause fisse (non modificabili dal calendario): 29 ottobre – 2 novembre
+const PRESET_REST = ["2026-10-29", "2026-10-30", "2026-10-31", "2026-11-01", "2026-11-02"];
+// Scadenza: 15 dicembre 2026, ore 20:00 (dalle 20:01 non si guarda più nulla)
+const DEADLINE_TIME = new Date(2026, 11, 15, 20, 0, 0);
+
+function sumMin(items) { return items.reduce((s, i) => s + (i.min || 0), 0); }
+function fmtMin(m) {
+  m = Math.round(m);
+  if (m < 60) return m + " min";
+  const h = Math.floor(m / 60), r = m % 60;
+  return h + "h" + (r ? " " + String(r).padStart(2, "0") : "");
+}
 
 // ====== CONFIGURAZIONE SUPABASE ======
 const SUPABASE_URL = "https://cmhbravprjeegtinqpbb.supabase.co";
@@ -406,8 +481,8 @@ function resetPlan() {
 
 function loadState() { return cache.checks; }
 function saveState(state) { cache.checks = state; push(); }
-function loadRestDays() { return new Set(cache.rest); }
-function saveRestDays(set) { cache.rest = [...set]; push(); }
+function loadRestDays() { return new Set([...cache.rest, ...PRESET_REST]); }
+function saveRestDays(set) { cache.rest = [...set].filter(k => !PRESET_REST.includes(k)); push(); }
 
 function isChecked(state, item) {
   return state[item.id] !== undefined ? !!state[item.id] : !!item.defaultChecked;
@@ -427,24 +502,48 @@ function buildAvailableDays(today, restDays) {
   let cursor = new Date(today);
   while (cursor <= DEADLINE_DAY) {
     if (!restDays.has(dateKey(cursor))) days.push(new Date(cursor));
-    cursor = new Date(cursor.getTime() + 86400000);
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
   }
   return days;
 }
 
+// Distribuisce i titoli rimasti (in ordine cronologico) sui giorni disponibili.
+// - ogni giorno ha un obiettivo di minuti proporzionale al suo peso, ricalcolato giorno per giorno
+// - un film lungo (>= LONG_MIN) sta da solo in una giornata
+// - non si supera mai il tetto di minuti del giorno (un film troppo lungo salta i giorni leggeri)
+// - l'ultimo giorno prende tutto quello che resta
 function buildSchedule(remaining, availableDays) {
   const D = availableDays.length;
-  const N = remaining.length;
   const groups = availableDays.map(d => ({ date: d, items: [] }));
-  if (D === 0 || N === 0) return groups;
-  const base = Math.floor(N / D);
-  const extra = N % D;
-  let idx = 0;
-  for (let i = 0; i < D; i++) {
-    const count = base + (i < extra ? 1 : 0);
-    for (let c = 0; c < count && idx < N; c++) {
-      groups[i].items.push(remaining[idx]);
-      idx++;
+  if (D === 0 || remaining.length === 0) return groups;
+  const ruleOf = d => DAY_RULES[d.getDay()];
+  let i = 0;
+  for (let d = 0; d < D && i < remaining.length; d++) {
+    const g = groups[d];
+    const rule = ruleOf(g.date);
+    if (d === D - 1) {
+      while (i < remaining.length) g.items.push(remaining[i++]);
+      break;
+    }
+    let leftMin = 0;
+    for (let k = i; k < remaining.length; k++) leftMin += remaining[k].min;
+    let leftW = 0;
+    for (let k = d; k < D; k++) leftW += ruleOf(groups[k].date).w;
+    const target = leftMin * rule.w / leftW;
+    let load = 0;
+    while (i < remaining.length) {
+      const it = remaining[i];
+      const isLong = it.min >= LONG_MIN;
+      if (g.items.length === 0) {
+        if (it.min > rule.cap) break; // troppo lungo per questo giorno: lo lascio a un giorno più libero
+        g.items.push(it); load += it.min; i++;
+        if (isLong) break;
+        continue;
+      }
+      if (isLong) break;
+      if (load + it.min > rule.cap) break;
+      if (load + it.min / 2 > target) break;
+      g.items.push(it); load += it.min; i++;
     }
   }
   return groups;
@@ -494,8 +593,9 @@ function renderCalendars(restDays, today) {
       const isPast = d < today;
       const isToday = sameDay(d, today);
       const isResting = restDays.has(dateKey(d));
-      cell.className = "day-cell" + (isPast ? " past" : "") + (isToday ? " today" : "") + (isResting ? " resting" : "");
-      if (!isPast) {
+      const isFixed = PRESET_REST.includes(dateKey(d));
+      cell.className = "day-cell" + (isPast ? " past" : "") + (isToday ? " today" : "") + (isResting ? " resting" : "") + (isFixed ? " fixed" : "");
+      if (!isPast && !isFixed) {
         cell.addEventListener("click", () => {
           const key = dateKey(d);
           if (restDays.has(key)) restDays.delete(key); else restDays.add(key);
@@ -545,8 +645,8 @@ function render() {
   } else if (D === 0) {
     document.getElementById("pace").textContent = "⚠️ scadenza superata";
   } else {
-    const avg = N / D;
-    document.getElementById("pace").textContent = avg <= 1 ? "1 al giorno" : ("~" + Math.ceil(avg) + " al giorno");
+    const avgMin = remaining.reduce((s, i) => s + i.min, 0) / D;
+    document.getElementById("pace").textContent = "~" + fmtMin(Math.round(avgMin / 5) * 5) + " al giorno";
   }
 
   // Oggi
@@ -584,6 +684,10 @@ function render() {
         row.appendChild(label);
         todayBox.appendChild(row);
       });
+      const meta = document.createElement("div");
+      meta.className = "today-meta";
+      meta.textContent = "Durata totale di oggi: circa " + fmtMin(sumMin(todayGroup.items));
+      todayBox.appendChild(meta);
       if (todayGroup.items.every(i => isChecked(state, i))) {
         const ok = document.createElement("div");
         ok.className = "rest-notice";
@@ -617,7 +721,7 @@ function render() {
       dayDiv.className = "day-group";
       const header = document.createElement("div");
       header.className = "day-group-header";
-      header.innerHTML = "<span>" + formatDate(cursor) + "</span><span class='count-badge'>" + group.items.length + " tit." + "</span>";
+      header.innerHTML = "<span>" + formatDate(cursor) + "</span><span class='count-badge'>" + group.items.length + " tit. · " + fmtMin(sumMin(group.items)) + "</span>";
       dayDiv.appendChild(header);
       group.items.forEach(item => {
         const checked = isChecked(state, item);
@@ -647,7 +751,7 @@ function render() {
       agenda.appendChild(dayDiv);
       shown++;
     }
-    cursor = new Date(cursor.getTime() + 86400000);
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1);
   }
   if (shown === 0) {
     agenda.innerHTML = '<div class="empty" style="color:var(--muted);font-size:0.85rem;font-style:italic;">Hai completato tutto! 🎉</div>';
@@ -703,8 +807,37 @@ function render() {
   document.getElementById("progressLabel").textContent = doneTotal + " / " + total + " (" + pct + "%)";
 }
 
+// Conto alla rovescia e allarme "tempo scaduto" (15 dicembre, ore 20:00)
+let alarmDismissed = false, alarmFired = false;
+function updateCountdown() {
+  const el = document.getElementById("deadlineLeft");
+  if (!el) return;
+  const diff = DEADLINE_TIME.getTime() - Date.now();
+  if (diff <= 0) { el.textContent = "scaduta"; return; }
+  const days = Math.floor(diff / 86400000);
+  const hours = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  el.textContent = days > 0 ? days + "g " + hours + "h" : hours + "h " + mins + "m";
+}
+function checkDeadline() {
+  updateCountdown();
+  if (Date.now() >= DEADLINE_TIME.getTime() && !alarmDismissed) {
+    document.getElementById("alarm").classList.add("show");
+    if (!alarmFired) {
+      alarmFired = true;
+      try { if (navigator.vibrate) navigator.vibrate([400, 200, 400, 200, 400]); } catch(e) {}
+    }
+  }
+}
+function dismissAlarm() {
+  alarmDismissed = true;
+  document.getElementById("alarm").classList.remove("show");
+}
+
 render();
 pull();
+checkDeadline();
+setInterval(checkDeadline, 15000);
 setInterval(pull, 8000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) pull(); });
 </script>

@@ -332,14 +332,24 @@ function readLocal() {
 }
 function writeLocal() { try { localStorage.setItem(CACHE_KEY, JSON.stringify(cache)); } catch(e) {} }
 function setStatus(t) { const el = document.getElementById("syncStatus"); if (el) el.textContent = t; }
+let memCode = null, codeBad = false;
+function badCode() {
+  codeBad = true; memCode = null;
+  try { localStorage.removeItem(CODE_KEY); } catch(e) {}
+  setStatus("Codice errato: ricarica la pagina per riprovare");
+}
 function getCode() {
+  if (codeBad) return null;
+  if (memCode) return memCode;
   let c = null;
   try { c = localStorage.getItem(CODE_KEY); } catch(e) {}
   if (!c) {
     c = prompt("Inserisci il tuo codice di accesso:");
-    if (c) { c = c.trim(); try { localStorage.setItem(CODE_KEY, c); } catch(e) {} }
+    if (!c || !c.trim()) { codeBad = true; setStatus("Codice mancante: ricarica la pagina"); return null; }
+    c = c.trim();
+    try { localStorage.setItem(CODE_KEY, c); } catch(e) {}
   }
-  return c;
+  memCode = c; return c;
 }
 async function rpc(fn, body) {
   const r = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + fn, {
@@ -360,7 +370,7 @@ async function push() {
     do {
       pending = false;
       const ok = await rpc("save_plan", { p_secret: code, p_checks: cache.checks, p_rest_days: cache.rest });
-      if (ok === false) { try { localStorage.removeItem(CODE_KEY); } catch(e) {} setStatus("Codice errato: ricarica la pagina"); unsynced = false; pushing = false; return; }
+      if (ok === false) { badCode(); unsynced = false; pushing = false; return; }
     } while (pending);
     unsynced = false; setStatus("✓ Sincronizzato");
   } catch(e) { unsynced = true; setStatus("Offline: salvato sul dispositivo"); }
@@ -372,7 +382,7 @@ async function pull() {
   const code = getCode(); if (!code) return;
   try {
     const d = await rpc("get_plan", { p_secret: code });
-    if (d === null) { try { localStorage.removeItem(CODE_KEY); } catch(e) {} setStatus("Codice errato: ricarica la pagina"); return; }
+    if (d === null) { badCode(); return; }
     const remoteEmpty = !Object.keys(d.checks || {}).length && !(d.rest_days || []).length;
     const localHasData = Object.keys(cache.checks).length || cache.rest.length;
     if (remoteEmpty && localHasData) { push(); return; }

@@ -230,8 +230,8 @@
 </main>
 
 <footer>
-  Ordine ufficiale secondo Marvel.com — "See the Complete MCU Timeline on Disney+", con l'aggiunta di Spider-Man: Brand New Day e Vision Quest (non ancora sulla pagina ufficiale al momento della pubblicazione).<br>
-  Le spunte e le pause si sincronizzano tra i tuoi dispositivi. Numero episodi di Wonder Man e Vision Quest indicativo.
+  Ordine ufficiale secondo Marvel.com — "See the Complete MCU Timeline on Disney+", con l'aggiunta di Spider-Man: Brand New Day e VisionQuest (non sulla pagina ufficiale).<br>
+  Le spunte e le pause si sincronizzano tra i tuoi dispositivi. Numero episodi di Wonder Man indicativo; VisionQuest ha date e durate ufficiali.
   <br><span id="syncStatus" style="opacity:.7"></span>
 </footer>
 
@@ -323,7 +323,10 @@ const mcuRaw = [
   { id: "dbaS2", title: "Daredevil: Born Again — Stagione 2", type: "movie", checked: true, note: "già visto per intero" },
   { id: "punisherolk", title: "The Punisher: One Last Kill", type: "movie", checked: true, note: "visto per intero" },
   { id: "smbnd", title: "Spider-Man: Brand New Day", type: "movie", checked: true, note: "visto al cinema" },
-  { id: "visionquest", title: "Vision Quest", type: "series", episodes: 6, checked: false, note: "N. episodi indicativo" },
+  { id: "visionquest", title: "VisionQuest", type: "series", episodes: 8, checked: false,
+    durs: [53, 45, 52, 48, 46, 54, 62, 68],
+    release: ["2026-10-14","2026-10-14","2026-10-21","2026-10-21","2026-10-28","2026-10-28","2026-11-04","2026-11-11"],
+    note: "Date ufficiali Disney+: 2 ep. il 14/10, 21/10, 28/10, poi 1 ep. il 4/11 e 11/11" },
 ];
 
 // Durate approssimative in minuti: film = durata, serie = durata di un episodio.
@@ -333,7 +336,7 @@ const DUR = {
   gotgholiday: 44, quantumania: 125, gotg3: 150, secretinvasion: 45,
   xmen1: 104, xmen2: 134, xmen3: 104, "xmen-dofp": 132, marvels: 105,
   "loki-2": 47, "whatif-2": 33, deadpoolwolverine: 128, agatha: 40,
-  "whatif-3": 30, bnw: 118, wonderman: 40, visionquest: 40,
+  "whatif-3": 30, bnw: 118, wonderman: 40,
 };
 
 function expand(raw) {
@@ -349,7 +352,9 @@ function expand(raw) {
           groupTitle: entry.title,
           groupNote: entry.note,
           isSeries: true,
-          min: DUR[entry.id] || 45,
+          min: (entry.durs && entry.durs[e - 1]) || DUR[entry.id] || 45,
+          release: entry.release ? entry.release[e - 1] : undefined,
+          note: entry.release ? "Esce il " + entry.release[e - 1].split("-").reverse().slice(0, 2).join("/") : undefined,
           defaultChecked: checkedForEp,
         });
       }

@@ -22,7 +22,7 @@
 --done: #2a9d5c;
 --rest: #555;
 }
-• { box-sizing: border-box; }
+* { box-sizing: border-box; }
 body {
 margin: 0;
 font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -172,6 +172,12 @@ padding: 8px 16px; border-radius: 8px; font-size: 0.8rem;
 }
 footer { text-align: center; color: var(--muted); font-size: 0.68rem; padding: 20px; }
 .warn { color: #ff8080; }
+.dur { color: var(--gold); font-size: 0.72rem; margin-left: 6px; font-weight: 400; white-space: nowrap; }
+.backup-text { font-size: 0.78rem; color: var(--muted); margin: 10px 0; line-height: 1.4; }
+#progressCode { width: 100%; min-height: 90px; background: #0f0e17; color: var(--text); border: 1px solid #2a2840; border-radius: 8px; padding: 8px; font-size: 0.7rem; word-break: break-all; }
+.backup-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.backup-btns button { background: transparent; border: 1px solid var(--violet); color: var(--text); padding: 8px 12px; border-radius: 8px; font-size: 0.8rem; }
+#progressMsg { margin-top: 8px; font-size: 0.78rem; color: var(--gold); }
 </style>
 </head>
 <body>
@@ -182,6 +188,7 @@ footer { text-align: center; color: var(--muted); font-size: 0.68rem; padding: 2
 <div class="countdown">
 <div class="pill">Giorni di visione: <b id="daysAvail">–</b></div>
 <div class="pill">Titoli da vedere: <b id="itemsLeft">–</b></div>
+<div class="pill">Tempo totale rimasto: <b id="timeLeft">–</b></div>
 <div class="pill">Ritmo: <b id="pace">–</b></div>
 <div class="pill">Pause impostate: <b id="restCount">–</b></div>
 <div class="pill">Scadenza tra: <b id="deadlineLeft">–</b></div>
@@ -226,12 +233,24 @@ footer { text-align: center; color: var(--muted); font-size: 0.68rem; padding: 2
 <span style="color:var(--muted); font-size:0.78rem;">Scadenza visione: 15 dicembre, ore 20:00 — poi si va al cinema</span>
 </div>
 
+<details class="master-list">
+<summary>💾 Salva / ripristina progresso</summary>
+<div class="backup-text">Le spunte sono già sincronizzate online. Questo codice è una copia di sicurezza extra (spunte + giorni di pausa): conservalo nelle note e, se un giorno serve, incollalo qui sotto e premi "Ripristina".</div>
+<textarea id="progressCode" placeholder="Qui compare il codice, oppure incollalo qui per ripristinare"></textarea>
+<div class="backup-btns">
+<button onclick="exportProgress()">Genera codice</button>
+<button onclick="copyProgress()">Copia</button>
+<button onclick="importProgress()">Ripristina</button>
+</div>
+<div id="progressMsg"></div>
+</details>
+
 <button class="reset-btn" onclick="resetPlan()">Azzera piano</button>
 </main>
 
 <footer>
 Ordine ufficiale secondo Marvel.com — "See the Complete MCU Timeline on Disney+", con l'aggiunta di Spider-Man: Brand New Day e VisionQuest (non sulla pagina ufficiale).<br>
-Le spunte e le pause si sincronizzano tra i tuoi dispositivi. Numero episodi di Wonder Man indicativo; VisionQuest ha date e durate ufficiali.
+Le spunte e le pause si sincronizzano tra i tuoi dispositivi. Durate: film e one-shot ufficiali; "~" = media per episodio o stima della stagione; Loki S2 e VisionQuest con durata per episodio.
 <br><span id="syncStatus" style="opacity:.7"></span>
 </footer>
 
@@ -329,15 +348,33 @@ release: ["2026-10-14","2026-10-14","2026-10-21","2026-10-21","2026-10-28","2026
 note: "Date ufficiali Disney+: 2 ep. il 14/10, 21/10, 28/10, poi 1 ep. il 4/11 e 11/11" },
 ];
 
-// Durate approssimative in minuti: film = durata, serie = durata di un episodio.
-// Se un titolo non è qui: film 110 min, episodio 45 min.
+// Durate in minuti. Film e one-shot: durata ufficiale.
+// Serie: DURS = durata esatta di ogni episodio; DUR = media per episodio (segnata con "~").
+// Stagioni "riassunto" (titoli singoli): durata totale stimata della stagione.
 const DUR = {
-echo: 45, msmarvel: 45, lovethunder: 119, ironheart: 45, werewolf: 53,
-gotgholiday: 44, quantumania: 125, gotg3: 150, secretinvasion: 45,
-xmen1: 104, xmen2: 134, xmen3: 104, "xmen-dofp": 132, marvels: 105,
-"loki-2": 47, "whatif-2": 33, deadpoolwolverine: 128, agatha: 40,
-"whatif-3": 30, bnw: 118, wonderman: 40,
+"cap-tfa":124, "os-agentcarter":15, "captain-marvel":124, "iron-man":126, "iron-man-2":124, hulk:112,
+"os-funny":4, thor:115, "os-consultant":4, avengers:143, "os-item47":9, "thor-dw":112, "iron-man-3":130,
+"cap-ws":136, gotg1:121, gotg2:136, aou:141, "antman-1":117, civilwar:147, blackwidow:134, blackpanther:134,
+homecoming:133, docstrange:115, ragnarok:130, antwasp:118, infinitywar:149, endgame:181, shangchi:132,
+ffh:129, eternals:156, nwh:148, mom:126, wakandaforever:161, lovethunder:119, werewolf:53, gotgholiday:44,
+quantumania:125, gotg3:150, marvels:105, deadpoolwolverine:128, bnw:118, thunderbolts:127, ffsteps:115,
+xmen1:104, xmen2:134, xmen3:104, "xmen-dofp":132,
+// stagioni intere (stima del totale)
+"dd-1":690, "jj-1":650, "dd-2":700, "lc-1":700, "if-1":650, defenders:400, "punisher-1":715, "jj-2":650,
+"lc-2":700, "if-2":450, "dd-3":715, "punisher-2":700, "jj-3":650, "loki-1":285, shehulk:300,
+dbaS1:500, dbaS2:360, punisherolk:60, smbnd:132,
+// serie: media per episodio
+"whatif-1":33, zombies:31, wandavision:36, falconws:55, hawkeye:46, moonknight:45, echo:46, msmarvel:45,
+ironheart:50, secretinvasion:37, "whatif-2":30, agatha:40, "whatif-3":30, wonderman:31,
 };
+const DURS = {
+"loki-2": [45, 49, 53, 48, 45, 51],
+};
+// Titoli la cui durata è una media/stima e non un valore esatto
+const APPROX = new Set(["dd-1","jj-1","dd-2","lc-1","if-1","defenders","punisher-1","jj-2","lc-2","if-2","dd-3",
+"punisher-2","jj-3","loki-1","shehulk","dbaS1","dbaS2","punisherolk","smbnd",
+"whatif-1","zombies","wandavision","falconws","hawkeye","moonknight","echo","msmarvel","ironheart",
+"secretinvasion","whatif-2","agatha","whatif-3","wonderman"]);
 
 function expand(raw) {
 const out = [];
@@ -352,7 +389,8 @@ groupId: entry.id,
 groupTitle: entry.title,
 groupNote: entry.note,
 isSeries: true,
-min: (entry.durs && entry.durs[e - 1]) || DUR[entry.id] || 45,
+min: (entry.durs && entry.durs[e - 1]) || (DURS[entry.id] && DURS[entry.id][e - 1]) || DUR[entry.id] || 45,
+approx: APPROX.has(entry.id) && !(entry.durs || DURS[entry.id]),
 release: entry.release ? entry.release[e - 1] : undefined,
 note: entry.release ? "Esce il " + entry.release[e - 1].split("-").reverse().slice(0, 2).join("/") : undefined,
 defaultChecked: checkedForEp,
@@ -363,6 +401,7 @@ out.push({
 id: entry.id, title: entry.title, note: entry.note,
 isSeries: false, groupTitle: entry.title,
 min: DUR[entry.id] || 110,
+approx: APPROX.has(entry.id),
 defaultChecked: entry.checked,
 });
 }
@@ -401,6 +440,17 @@ m = Math.round(m);
 if (m < 60) return m + " min";
 const h = Math.floor(m / 60), r = m % 60;
 return h + "h" + (r ? " " + String(r).padStart(2, "0") : "");
+}
+
+function durText(item) {
+const m = item.min;
+return "⏱ " + (item.approx ? "~" : "") + m + " min" + (m >= 60 ? " (" + fmtMin(m) + ")" : "");
+}
+function durSpan(item) {
+const sp = document.createElement("span");
+sp.className = "dur";
+sp.textContent = durText(item);
+return sp;
 }
 
 // ====== CONFIGURAZIONE SUPABASE ======
@@ -485,6 +535,34 @@ function resetPlan() {
 if (!confirm("Azzerare tutte le spunte e le pause di questo piano?")) return;
 cache = { checks: {}, rest: [] };
 push(); render();
+}
+
+function progMsg(t) { const el = document.getElementById("progressMsg"); if (el) el.textContent = t; }
+function exportProgress() {
+const payload = { v: 1, checks: cache.checks, rest: cache.rest };
+const code = btoa(unescape(encodeURIComponent(JSON.stringify(payload))));
+document.getElementById("progressCode").value = code;
+const n = Object.keys(cache.checks).filter(k => k.indexOf("__") !== 0).length;
+progMsg("Codice generato (" + n + " spunte modificate, " + cache.rest.length + " giorni di pausa). Premi Copia e salvalo.");
+}
+function copyProgress() {
+const ta = document.getElementById("progressCode");
+if (!ta.value) exportProgress();
+ta.select();
+try { navigator.clipboard.writeText(ta.value).then(() => progMsg("Copiato negli appunti."), () => { document.execCommand("copy"); progMsg("Copiato negli appunti."); }); }
+catch(e) { try { document.execCommand("copy"); progMsg("Copiato negli appunti."); } catch(e2) { progMsg("Seleziona il testo e copialo a mano."); } }
+}
+function importProgress() {
+const raw = document.getElementById("progressCode").value.trim();
+if (!raw) { progMsg("Incolla prima un codice."); return; }
+let p;
+try { p = JSON.parse(decodeURIComponent(escape(atob(raw)))); } catch(e) { progMsg("Codice non valido."); return; }
+const okRest = Array.isArray(p.rest) && p.rest.every(k => /^\d{4}-\d{2}-\d{2}$/.test(k));
+if (!p || p.v !== 1 || typeof p.checks !== "object" || p.checks === null || !okRest) { progMsg("Codice non valido."); return; }
+if (!confirm("Sostituire spunte e pause attuali con quelle del codice?")) return;
+cache = { checks: p.checks, rest: p.rest.filter(k => !PRESET_REST.includes(k)) };
+push(); render();
+progMsg("Progresso ripristinato.");
 }
 
 function loadState() { return cache.checks; }
@@ -648,6 +726,7 @@ const N = remaining.length;
 const D = availableDays.length;
 document.getElementById("daysAvail").textContent = D;
 document.getElementById("itemsLeft").textContent = N;
+document.getElementById("timeLeft").textContent = N === 0 ? "0" : fmtMin(sumMin(remaining));
 document.getElementById("restCount").textContent = [...restDays].filter(k => k >= dateKey(today)).length;
 if (N === 0) {
 document.getElementById("pace").textContent = "sei in pari! 🎉";
@@ -683,6 +762,7 @@ render();
 });
 const label = document.createElement("label");
 label.textContent = item.title;
+label.appendChild(durSpan(item));
 if (item.note) {
 const note = document.createElement("span");
 note.className = "note";
@@ -747,6 +827,7 @@ render();
 });
 const label = document.createElement("label");
 label.textContent = item.title;
+label.appendChild(durSpan(item));
 if (item.note) {
 const note = document.createElement("span");
 note.className = "note";
@@ -778,7 +859,11 @@ const doneInGroup = mcuTrack.filter(t => t.groupId === item.groupId && isChecked
 const totalInGroup = mcuTrack.filter(t => t.groupId === item.groupId).length;
 const gt = document.createElement("div");
 gt.className = "group-title";
-gt.innerHTML = '<span>' + item.groupTitle + (item.groupNote ? ' <span class="note" style="display:inline;">— ' + item.groupNote + '</span>' : '') + '</span><span class="group-count">' + doneInGroup + '/' + totalInGroup + '</span>';
+const grpItems = mcuTrack.filter(t => t.groupId === item.groupId);
+const grpTot = sumMin(grpItems);
+const same = grpItems.every(t => t.min === grpItems[0].min);
+const grpDur = "⏱ " + (same ? (item.approx ? "~" : "") + item.min + " min/ep · " : "") + "tot " + (item.approx ? "~" : "") + fmtMin(grpTot) + " (" + grpTot + " min)";
+gt.innerHTML = '<span>' + item.groupTitle + (item.groupNote ? ' <span class="note" style="display:inline;">— ' + item.groupNote + '</span>' : '') + ' <span class="dur">' + grpDur + '</span></span><span class="group-count">' + doneInGroup + '/' + totalInGroup + '</span>';
 master.appendChild(gt);
 }
 } else {
@@ -798,6 +883,7 @@ render();
 });
 const label = document.createElement("label");
 label.textContent = item.title;
+label.appendChild(durSpan(item));
 if (item.note && !item.isSeries) {
 const note = document.createElement("span");
 note.className = "note";
